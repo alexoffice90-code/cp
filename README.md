@@ -1,47 +1,30 @@
-# Booking Planner — Cloudflare Pages + D1
+# Booking Planner — Cloudflare Worker + D1
 
-This ZIP is ready for a GitHub → Cloudflare Pages deployment. It has **no wrangler.toml**, no npm, and no build step.
+## GitHub structure
+Upload the CONTENTS of this folder to the ROOT of your GitHub repository.
 
-## 1. Create D1
-Cloudflare Dashboard → Workers & Pages → D1 → Create database.
-Open the database Console and run all of `schema.sql`.
+Required files:
+- worker.js
+- wrangler.jsonc
+- schema.sql
 
-## 2. Upload to GitHub
-Put the contents of this ZIP directly in the repository root. Do not put them inside another folder.
+## D1 setup
+1. Create a D1 database in Cloudflare.
+2. Copy its Database name and Database ID.
+3. Open `wrangler.jsonc`.
+4. Replace:
+   - `REPLACE_WITH_YOUR_D1_DATABASE_NAME`
+   - `REPLACE_WITH_YOUR_D1_DATABASE_ID`
+5. Run the SQL from `schema.sql` in the D1 Console.
 
-## 3. Create Pages project
-Workers & Pages → Create → Pages → Connect to Git.
-Choose the GitHub repository.
-Framework: **None**
-Build command: **empty**
-Build output directory: **/**
-Deploy.
+## Cloudflare deployment
+Create/import the Worker from this GitHub repository. The Worker entry point is:
+`worker.js`
 
-The `functions/` folder is automatically used by Cloudflare Pages Functions.
+The D1 binding is declared in `wrangler.jsonc` as:
+`DB`
 
-## 4. Bind D1
-Pages project → Settings → Functions → D1 database bindings → Add binding.
-**Variable name:** `DB`
-**D1 database:** choose the database you created.
-Save, then redeploy.
+If the dashboard offers a D1 binding editor, it should already be represented by the configuration; you do not need to rely on the Add Binding button.
 
-## 5. Use it
-Open the Pages URL. Create an account or log in.
-Each account has its own planner data stored in D1 and can use the site from different devices.
-
-## Custom domain
-Pages project → Custom domains → Add custom domain.
-
-## Included
-- Month + week calendar
-- Customers/bookings
-- CASH / CARD / BANK TRANSFER / KLARNA
-- deposits and confirmed status
-- weekly/monthly invoice TXT + print/PDF
-- planner achievement report
-- goal calculator
-- settings/categories
-- login/register/logout
-- separate D1 data per user
-
-No Wrangler is required.
+IMPORTANT:
+Do not put passwords, API keys, or secrets in this file.
