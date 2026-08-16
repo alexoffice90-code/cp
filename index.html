@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Booking Planner</title>
+<link rel="icon" href="data:,">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body style="margin:0;">
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+// ---------- Cloudflare Pages + D1 storage ----------
+window.storage = {
+  async get(key) {
+    const res = await fetch("/api/data", { credentials: "same-origin" });
+    if (res.status === 401) throw new Error("UNAUTHENTICATED");
+    if (!res.ok) throw new Error("Could not load data");
+    const payload = await res.json();
+    return payload && payload.data ? { key, value: JSON.stringify(payload.data) } : null;
+  },
+  async set(key, value) {
+    const res = await fetch("/api/data", {
+      method: "PUT",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ data: JSON.parse(value) })
+    });
+    if (res.status === 401) throw new Error("UNAUTHENTICATED");
+    if (!res.ok) throw new Error("Could not save data");
+    return { key, value };
+  }
+};
+
+// ---------- Minimal inline icon set (no external icon dependency) ----------
+function Icon({ children, size = 16, color = "currentColor" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color}
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {children}
+    </svg>
+  );
+}
+const ChevronLeft = ({ size, color }) => <Icon size={size} color={color}><polyline points="15 18 9 12 15 6" /></Icon>;
+const ChevronRight = ({ size, color }) => <Icon size={size} color={color}><polyline points="9 18 15 12 9 6" /></Icon>;
+const ChevronDown = ({ size, color }) => <Icon size={size} color={color}><polyline points="6 9 12 15 18 9" /></Icon>;
+const X = ({ size, color }) => <Icon size={size} color={color}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></Icon>;
+const Plus = ({ size, color }) => <Icon size={size} color={color}><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></Icon>;
+const Check = ({ size, color }) => <Icon size={size} color={color}><polyline points="20 6 9 17 4 12" /></Icon>;
+const Trash2 = ({ size, color }) => <Icon size={size} color={color}>
+  <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+  <path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+</Icon>;
+const Settings = ({ size, color }) => <Icon size={size} color={color}>
+  <circle cx="12" cy="12" r="3" />
+  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+</Icon>;
+const FileText = ({ size, color }) => <Icon size={size} color={color}>
+  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+  <polyline points="14 2 14 8 20 8" />
+  <line x1="8" y1="13" x2="16" y2="13" />
+  <line x1="8" y1="17" x2="14" y2="17" />
+</Icon>;
+const Calculator = ({ size, color }) => <Icon size={size} color={color}>
+  <rect x="4" y="2" width="16" height="20" rx="2" /><line x1="8" y1="6" x2="16" y2="6" />
+  <line x1="8" y1="10" x2="8" y2="10" /><line x1="12" y1="10" x2="12" y2="10" /><line x1="16" y1="10" x2="16" y2="10" />
+  <line x1="8" y1="14" x2="8" y2="14" /><line x1="12" y1="14" x2="12" y2="14" /><line x1="16" y1="14" x2="16" y2="14" />
+  <line x1="8" y1="18" x2="8" y2="18" /><line x1="12" y1="18" x2="12" y2="18" /><line x1="16" y1="18" x2="16" y2="18" />
+</Icon>;
+
+
+// ---------- Design tokens ----------
+const PALETTE = ["#2D6A4F", "#C9A24B", "#5B7B9A", "#B05C4A", "#7A6C8F", "#4A8B8B"];
+const INK = "#1B1F2A";
+const INK_SOFT = "#5B6472";
+const BG = "#FAF9F6";
+const SURFACE = "#FFFFFF";
+const LINE = "#E4E1D8";
+const GOLD = "#C9A24B";
+const GREEN = "#2D6A4F";
+const RUST = "#B05C4A";
+
+const FONT_DISPLAY = "'Fraunces', serif";
+const FONT_BODY = "'IBM Plex Sans', sans-serif";
+const FONT_MONO = "'IBM Plex Mono', monospace";
+
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+// ---------- Date helpers ----------
+const pad = (n) => String(n).padStart(2, "0");
+const dateKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const isSameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
+const addMonthsFn = (d, n) => { const r = new Date(d); r.setMonth(r.getMonth() + n); return r; };
+const startOfWeek = (d) => { const day = d.getDay(); const diff = day === 0 ? -6 : 1 - day; const r = new Date(d); r.setDate(d.getDate() + diff); r.setHours(0, 0, 0, 0); return r; };
+const getWeekDates = (d) => { const s = startOfWeek(d); return Array.from({ length: 7 }, (_, i) => addDays(s, i)); };
+const getMonthMatrix = (d) => {
+  const year = d.getFullYear(), month = d.getMonth();
+  const first = new Date(year, month, 1);
+  const last = new Date(year, month + 1, 0);
+  let cursor = startOfWeek(first);
+  const weeks = [];
+  while (true) {
+    const week = [];
+    for (let i = 0; i < 7; i++) { week.push(new Date(cursor)); cursor = addDays(cursor, 1); }
+    weeks.push(week);
+    if (cursor > last) break;
+  }
+  return weeks;
+};
+const PAYMENT_METHODS = ["CASH", "CARD", "BANK TRANSFER", "KLARNA"];
+const invoiceDate = (key) => {
+  const d = key ? new Date(key + "T00:00:00") : new Date();
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+};
+const genId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+const fmtMoney = (n, currency) => {
+  const num = Number(n) || 0;
+  const formatted = num.toLocaleString("en-GB", { minimumFractionDigits: num % 1 !== 0 ? 2 : 0, maximumFractionDigits: 2 });
+  return `${currency}${formatted}`;
+};
+const categoryColor = (name, categories) => {
+  const idx = categories.findIndex((c) => c.name === name);
+  return idx === -1 ? "#9CA3AF" : PALETTE[idx % PALETTE.length];
+};
+
+function defaultData() {
+  return {
+    settings: {
+      target: 8000,
+      currency: "£",
+      categories: [
+        { id: "c1", name: "Full Day", price: 600 },
+        { id: "c2", name: "Média", price: 200 },
+        { id: "c3", name: "Minimum", price: 80 },
+      ],
+    },
+    bookings: {},
+  };
+}
+
+function monthStats(data, date) {
+  const year = date.getFullYear(), month = date.getMonth();
+  const prefix = `${year}-${pad(month + 1)}`;
+  let scheduled = 0, completed = 0, deposits = 0, count = 0;
+  Object.entries(data.bookings).forEach(([key, list]) => {
+    if (!key.startsWith(prefix)) return;
+    (list || []).forEach((b) => {
+      scheduled += Number(b.price) || 0;
+      if (b.completed) completed += Number(b.price) || 0;
+      deposits += Number(b.deposit) || 0;
+      count += 1;
+    });
+  });
+  return { scheduled, completed, deposits, count };
+}
+
+// ---------- Shared style helpers ----------
+const inputStyle = { fontFamily: FONT_BODY, border: `1px solid ${LINE}`, borderRadius: 6, padding: "7px 9px", fontSize: 13, width: "100%", color: INK, background: SURFACE };
+const labelStyle = { fontSize: 10.5, color: INK_SOFT, fontFamily: FONT_BODY, marginBottom: 3, display: "block", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" };
+const navBtn = { width: 30, height: 30, borderRadius: 7, border: `1px solid ${LINE}`, background: SURFACE, color: INK, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 };
+const toggleBtn = { padding: "7px 14px", fontSize: 12, fontWeight: 500, border: "none", cursor: "pointer", fontFamily: FONT_BODY };
+const iconBtn = { width: 34, height: 34, borderRadius: 8, border: `1px solid ${LINE}`, background: SURFACE, color: INK, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 };
+const stepBtn = { width: 24, height: 24, borderRadius: 6, border: `1px solid ${LINE}`, background: SURFACE, cursor: "pointer", fontSize: 14, color: INK, display: "flex", alignItems: "center", justifyContent: "center" };
+const modalWrap = { position: "fixed", inset: 0, background: "rgba(27,31,42,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 };
+const modalCard = { background: BG, borderRadius: 14, width: "100%", maxWidth: 440, maxHeight: "85vh", overflowY: "auto", padding: 18, border: `1px solid ${LINE}` };
+
+function Row({ label, value, bold, color }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", fontFamily: FONT_BODY }}>
+      <span style={{ fontSize: 12.5, color: INK_SOFT }}>{label}</span>
+      <span style={{ fontSize: bold ? 14 : 12.5, fontWeight: bold ? 700 : 500, color: color || INK, fontFamily: FONT_MONO }}>{value}</span>
+    </div>
+  );
+}
+
+// ---------- Booking form ----------
+function BookingForm({ categories, currency, initial, onSave, onCancel, onDelete }) {
+  const [category, setCategory] = useState(initial?.category || categories[0]?.name || "");
+  const [customerName, setCustomerName] = useState(initial?.customerName || "");
+  const [price, setPrice] = useState(initial?.price ?? (categories[0]?.price || 0));
+  const [deposit, setDeposit] = useState(initial?.deposit ?? 0);
+  const [notes, setNotes] = useState(initial?.notes || "");
+  const [paymentType, setPaymentType] = useState(initial?.paymentType || "CASH");
+  const [completed, setCompleted] = useState(initial?.completed || false);
+
+  const handleCategoryChange = (name) => {
+    setCategory(name);
+    const cat = categories.find((c) => c.name === name);
+    if (cat) setPrice(cat.price);
+  };
+
+  const handleSubmit = () => {
+    onSave({ category, customerName, price: Number(price) || 0, deposit: Number(deposit) || 0, notes, paymentType, completed });
+  };
+
+  return (
+    <div style={{ padding: 14, background: "#FBFAF7", borderRadius: 10, border: `1px solid ${LINE}` }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+        <div>
+          <label style={labelStyle}>Category</label>
+          <select style={inputStyle} value={category} onChange={(e) => handleCategoryChange(e.target.value)}>
+            {categories.map((c) => (<option key={c.id} value={c.name}>{c.name} · {fmtMoney(c.price, currency)}</option>))}
+          </select>
+        </div>
+        <div>
+          <label style={labelStyle}>Price</label>
+          <input style={{ ...inputStyle, fontFamily: FONT_MONO }} type="number" value={price} onChange={(e) => setPrice(e.target.value)} />
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+        <div>
+          <label style={labelStyle}>Customer name</label>
+          <input style={inputStyle} type="text" placeholder="e.g. Sarah Jones" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+        </div>
+        <div>
+          <label style={labelStyle}>Payment method</label>
+          <select style={inputStyle} value={paymentType} onChange={(e) => setPaymentType(e.target.value)}>
+            {PAYMENT_METHODS.map((method) => <option key={method} value={method}>{method}</option>)}
+          </select>
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+        <div>
+          <label style={labelStyle}>Deposit</label>
+          <input style={{ ...inputStyle, fontFamily: FONT_MONO }} type="number" value={deposit} onChange={(e) => setDeposit(e.target.value)} />
+        </div>
+        <div style={{ display: "flex", alignItems: "flex-end", paddingBottom: 8 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: INK, cursor: "pointer", fontFamily: FONT_BODY }}>
+            <input type="checkbox" checked={completed} onChange={(e) => setCompleted(e.target.checked)} />
+            Confirmed
+          </label>
+        </div>
+      </div>
+      <div style={{ marginBottom: 12 }}>
+        <label style={labelStyle}>Notes</label>
+        <textarea style={{ ...inputStyle, minHeight: 54, resize: "vertical" }} placeholder="Location, timing, extras..." value={notes} onChange={(e) => setNotes(e.target.value)} />
+      </div>
+      <div style={{ display: "flex", gap: 8, justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          {onDelete && (
+            <button onClick={onDelete} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: RUST, background: "none", border: "none", cursor: "pointer", fontFamily: FONT_BODY, padding: 0 }}>
+              <Trash2 size={14} /> Delete
+            </button>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={onCancel} style={{ fontSize: 12, padding: "7px 12px", borderRadius: 6, border: `1px solid ${LINE}`, background: SURFACE, color: INK_SOFT, cursor: "pointer", fontFamily: FONT_BODY }}>Cancel</button>
+          <button onClick={handleSubmit} style={{ fontSize: 12, padding: "7px 14px", borderRadius: 6, border: "none", background: GREEN, color: "#fff", cursor: "pointer", fontFamily: FONT_BODY, fontWeight: 600 }}>Save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Booking card (collapsed / expanded-to-edit) ----------
+function BookingCard({ booking, categories, currency, onUpdate, onDelete, defaultExpanded }) {
+  const [expanded, setExpanded] = useState(!!defaultExpanded);
+  const color = categoryColor(booking.category, categories);
+
+  if (expanded) {
+    return (
+      <div style={{ marginBottom: 8 }}>
+        <BookingForm
+          categories={categories}
+          currency={currency}
+          initial={booking}
+          onSave={(patch) => { onUpdate(patch); setExpanded(false); }}
+          onCancel={() => setExpanded(false)}
+          onDelete={onDelete}
+        />
+      </div>
+    );
+  }
+
+  const balance = (Number(booking.price) || 0) - (Number(booking.deposit) || 0);
+  return (
+    <div onClick={() => setExpanded(true)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8, border: `1px solid ${LINE}`, background: SURFACE, marginBottom: 6, cursor: "pointer" }}>
+      <div style={{ width: 4, alignSelf: "stretch", borderRadius: 2, background: color, minHeight: 30 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontFamily: FONT_BODY, fontSize: 13.5, fontWeight: 600, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {booking.customerName || "Untitled"}
+          </span>
+          {booking.completed && <Check size={13} color={GREEN} />}
+        </div>
+        <div style={{ fontFamily: FONT_MONO, fontSize: 11.5, color: INK_SOFT }}>
+          {booking.category} · {fmtMoney(booking.price, currency)} · {booking.paymentType || "CASH"}
+          {booking.deposit > 0 ? ` · dep ${fmtMoney(booking.deposit, currency)}` : ""}
+          {balance > 0 && booking.deposit > 0 ? ` · due ${fmtMoney(balance, currency)}` : ""}
+        </div>
+      </div>
+      <ChevronDown size={15} color={INK_SOFT} />
+    </div>
+  );
+}
+
+// ---------- Month grid ----------
+function MonthGrid({ currentDate, bookings, categories, currency, onDayClick, onChipClick }) {
+  const matrix = getMonthMatrix(currentDate);
+  const today = new Date();
+  const month = currentDate.getMonth();
+  return (
+    <div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 1, marginBottom: 1 }}>
+        {DAY_NAMES.map((d) => (
+          <div key={d} style={{ textAlign: "center", fontSize: 10.5, fontWeight: 600, color: INK_SOFT, padding: "6px 0", fontFamily: FONT_BODY, letterSpacing: "0.04em", textTransform: "uppercase" }}>{d}</div>
+        ))}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 1, background: LINE, border: `1px solid ${LINE}`, borderRadius: 10, overflow: "hidden" }}>
+        {matrix.flat().map((day) => {
+          const key = dateKey(day);
+          const inMonth = day.getMonth() === month;
+          const list = bookings[key] || [];
+          const isToday = isSameDay(day, today);
+          const dayTotal = list.reduce((s, b) => s + (Number(b.price) || 0), 0);
+          const dayNumColor = isToday ? "#fff" : (inMonth ? INK : "#B7B2A6");
+          return (
+            <div key={key} onClick={() => onDayClick(key)} style={{ background: inMonth ? SURFACE : "#F4F2ED", minHeight: 92, padding: 6, cursor: "pointer" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                <span style={{ fontFamily: FONT_MONO, fontSize: 12, fontWeight: isToday ? 700 : 400, color: dayNumColor, background: isToday ? GOLD : "transparent", borderRadius: isToday ? "50%" : 0, width: isToday ? 20 : "auto", height: isToday ? 20 : "auto", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {day.getDate()}
+                </span>
+                {dayTotal > 0 && <span style={{ fontFamily: FONT_MONO, fontSize: 9.5, color: INK_SOFT }}>{fmtMoney(dayTotal, currency)}</span>}
+              </div>
+              {list.slice(0, 2).map((b) => {
+                const color = categoryColor(b.category, categories);
+                return (
+                  <div key={b.id} onClick={(e) => { e.stopPropagation(); onChipClick(key, b.id); }}
+                    style={{ fontSize: 10.5, borderRadius: 4, padding: "2px 4px", marginBottom: 2, background: color + "1E", borderLeft: `2px solid ${color}`, color: INK, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: FONT_BODY }}>
+                    {b.customerName || b.category}
+                  </div>
+                );
+              })}
+              {list.length > 2 && <div style={{ fontSize: 9.5, color: INK_SOFT, fontFamily: FONT_BODY }}>+{list.length - 2} more</div>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Week view ----------
+function WeekView({ currentDate, bookings, categories, currency, onAdd, onUpdate, onDelete }) {
+  const week = getWeekDates(currentDate);
+  const today = new Date();
+  const [addingFor, setAddingFor] = useState(null);
+  return (
+    <div>
+      {week.map((day) => {
+        const key = dateKey(day);
+        const list = bookings[key] || [];
+        const dayTotal = list.reduce((s, b) => s + (Number(b.price) || 0), 0);
+        const isToday = isSameDay(day, today);
+        return (
+          <div key={key} style={{ marginBottom: 14, background: SURFACE, border: `1px solid ${LINE}`, borderRadius: 10, padding: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                <span style={{ fontFamily: FONT_DISPLAY, fontSize: 17, fontWeight: 600, color: isToday ? GOLD : INK }}>
+                  {DAY_NAMES[(day.getDay() + 6) % 7]} {day.getDate()}
+                </span>
+                <span style={{ fontFamily: FONT_BODY, fontSize: 11, color: INK_SOFT }}>{MONTH_NAMES[day.getMonth()].slice(0, 3)}</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                {dayTotal > 0 && <span style={{ fontFamily: FONT_MONO, fontSize: 12, color: INK_SOFT }}>{fmtMoney(dayTotal, currency)}</span>}
+                <button onClick={() => setAddingFor(addingFor === key ? null : key)}
+                  style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, padding: "5px 10px", borderRadius: 6, border: `1px solid ${LINE}`, background: "#FBFAF7", color: INK, cursor: "pointer", fontFamily: FONT_BODY }}>
+                  <Plus size={13} /> Add
+                </button>
+              </div>
+            </div>
+            {list.map((b) => (
+              <BookingCard key={b.id} booking={b} categories={categories} currency={currency}
+                onUpdate={(patch) => onUpdate(key, b.id, patch)} onDelete={() => onDelete(key, b.id)} />
+            ))}
+            {list.length === 0 && addingFor !== key && (
+              <div style={{ fontSize: 12, color: "#B7B2A6", fontFamily: FONT_BODY, fontStyle: "italic" }}>No sessions booked</div>
+            )}
+            {addingFor === key && (
+              <BookingForm categories={categories} currency={currency} initial={null}
+                onSave={(b) => { onAdd(key, b); setAddingFor(null); }}
+                onCancel={() => setAddingFor(null)} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------- Day panel (month view) ----------
+function DayPanel({ dateKeyValue, bookings, categories, currency, onAdd, onUpdate, onDelete, onClose, focusId }) {
+  const list = bookings[dateKeyValue] || [];
+  const [adding, setAdding] = useState(list.length === 0);
+  const d = new Date(dateKeyValue + "T00:00:00");
+  return (
+    <div style={modalWrap} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{ ...modalCard, maxWidth: 420 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <span style={{ fontFamily: FONT_DISPLAY, fontSize: 20, fontWeight: 600, color: INK }}>
+            {DAY_NAMES[(d.getDay() + 6) % 7]}, {d.getDate()} {MONTH_NAMES[d.getMonth()]}
+          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <button onClick={() => window.dispatchEvent(new CustomEvent("planner-open-invoice", { detail: dateKeyValue }))} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, padding: "6px 8px", borderRadius: 6, border: `1px solid ${LINE}`, background: SURFACE, color: INK, cursor: "pointer", fontFamily: FONT_BODY }}>
+              <FileText size={13} /> Invoice
+            </button>
+            <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: INK_SOFT }}><X size={18} /></button>
+          </div>
+        </div>
+        {list.map((b) => (
+          <BookingCard key={b.id} booking={b} categories={categories} currency={currency}
+            defaultExpanded={b.id === focusId}
+            onUpdate={(patch) => onUpdate(dateKeyValue, b.id, patch)} onDelete={() => onDelete(dateKeyValue, b.id)} />
+        ))}
+        {!adding && (
+          <button onClick={() => setAdding(true)} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, padding: "9px 12px", borderRadius: 8, border: `1px dashed ${LINE}`, background: "none", color: INK_SOFT, cursor: "pointer", width: "100%", justifyContent: "center", fontFamily: FONT_BODY }}>
+            <Plus size={14} /> Add customer
+          </button>
+        )}
+        {adding && (
+          <BookingForm categories={categories} currency={currency} initial={null}
+            onSave={(b) => { onAdd(dateKeyValue, b); setAdding(false); }}
+            onCancel={() => setAdding(false)} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+// ---------- Weekly / monthly invoice report ----------
+function InvoiceModal({ bookings, currency, initialDate, onClose }) {
+  const [period, setPeriod] = useState("week");
+  const [anchorDate, setAnchorDate] = useState(initialDate || dateKey(new Date()));
+
+  const anchor = new Date(anchorDate + "T00:00:00");
+
+  const getRange = () => {
+    if (period === "week") {
+      const start = startOfWeek(anchor);
+      const end = addDays(start, 6);
+      return { start, end };
+    }
+    return {
+      start: new Date(anchor.getFullYear(), anchor.getMonth(), 1),
+      end: new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0)
+    };
+  };
+
+  const { start, end } = getRange();
+
+  const rows = [];
+  let cursor = new Date(start);
+  while (cursor <= end) {
+    const key = dateKey(cursor);
+    (bookings[key] || []).forEach((b) => {
+      rows.push({ date: new Date(cursor), key, booking: b });
+    });
+    cursor = addDays(cursor, 1);
+  }
+
+  const reportText = rows.length
+    ? rows.map(({ date, booking }) => {
+        const dateText = `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`;
+        const notes = booking.notes ? ` [${booking.notes}]` : "";
+        return `${dateText}\n${booking.customerName || "Customer"} - ${fmtMoney(booking.price, currency)} ${booking.paymentType || "CASH"}${notes}`;
+      }).join("\n\n")
+    : "No customers in this period.";
+
+  const total = rows.reduce((sum, row) => sum + (Number(row.booking.price) || 0), 0);
+
+  const periodLabel = period === "week"
+    ? `Week ${pad(start.getDate())}/${pad(start.getMonth() + 1)}/${start.getFullYear()} - ${pad(end.getDate())}/${pad(end.getMonth() + 1)}/${end.getFullYear()}`
+    : `${MONTH_NAMES[start.getMonth()]} ${start.getFullYear()}`;
+
+  const safeFilename = period === "week"
+    ? `Invoice-Week-${dateKey(start)}`
+    : `Invoice-${start.getFullYear()}-${pad(start.getMonth() + 1)}`;
+
+  const printReport = () => {
+    const printWindow = window.open("", "_blank", "width=850,height=900");
+    if (!printWindow) return;
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${safeFilename}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 38px; color: #1B1F2A; }
+          h1 { font-size: 22px; margin-bottom: 5px; }
+          .period { color: #5B6472; margin-bottom: 24px; }
+          .invoice { font-family: "Courier New", monospace; font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
+          .total { margin-top: 28px; padding-top: 12px; border-top: 1px solid #ccc; font-weight: bold; }
+          @media print { body { margin: 20mm; } }
+        </style>
+      </head>
+      <body>
+        <h1>Invoice Report</h1>
+        <div class="period">${periodLabel}</div>
+        <div class="invoice">${reportText.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</div>
+        <div class="total">Total: ${fmtMoney(total, currency)} · ${rows.length} customer${rows.length === 1 ? "" : "s"}</div>
+        <script>window.onload = function(){ window.print(); }<\/script>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  const downloadText = () => {
+    const blob = new Blob([reportText], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${safeFilename}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const emailReport = () => {
+    const subject = encodeURIComponent(`${period === "week" ? "Weekly" : "Monthly"} invoice report - ${periodLabel}`);
+    const body = encodeURIComponent(`${reportText}\n\nTotal: ${fmtMoney(total, currency)}`);
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+  };
+
+  return (
+    <div style={modalWrap} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{ ...modalCard, maxWidth: 520 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <span style={{ fontFamily: FONT_DISPLAY, fontSize: 20, fontWeight: 600, color: INK, display: "flex", alignItems: "center", gap: 8 }}>
+            <FileText size={18} color={GOLD} /> Invoice report
+          </span>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: INK_SOFT }}><X size={18} /></button>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+          <button onClick={() => setPeriod("week")} style={{ ...toggleBtn, borderRadius: 7, background: period === "week" ? INK : SURFACE, color: period === "week" ? "#fff" : INK_SOFT, border: `1px solid ${LINE}` }}>Weekly</button>
+          <button onClick={() => setPeriod("month")} style={{ ...toggleBtn, borderRadius: 7, background: period === "month" ? INK : SURFACE, color: period === "month" ? "#fff" : INK_SOFT, border: `1px solid ${LINE}` }}>Monthly</button>
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <label style={labelStyle}>{period === "week" ? "Choose a date in the week" : "Choose a date in the month"}</label>
+          <input type="date" value={anchorDate} onChange={(e) => setAnchorDate(e.target.value)} style={inputStyle} />
+        </div>
+
+        <div style={{ fontFamily: FONT_BODY, fontSize: 12, color: INK_SOFT, marginBottom: 10 }}>
+          {periodLabel} · {rows.length} customer{rows.length === 1 ? "" : "s"} · <b style={{ color: INK }}>{fmtMoney(total, currency)}</b>
+        </div>
+
+        <div style={{ background: SURFACE, border: `1px solid ${LINE}`, borderRadius: 10, padding: 14, marginBottom: 14, maxHeight: 330, overflowY: "auto" }}>
+          <pre style={{ margin: 0, whiteSpace: "pre-wrap", fontFamily: FONT_MONO, fontSize: 12.5, lineHeight: 1.6, color: INK }}>{reportText}</pre>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+          <button onClick={downloadText} style={{ fontSize: 12, padding: "9px 10px", borderRadius: 7, border: `1px solid ${LINE}`, background: SURFACE, color: INK, cursor: "pointer", fontFamily: FONT_BODY }}>Save TXT</button>
+          <button onClick={printReport} style={{ fontSize: 12, padding: "9px 10px", borderRadius: 7, border: "none", background: GREEN, color: "#fff", cursor: "pointer", fontFamily: FONT_BODY, fontWeight: 600 }}>Print / Save PDF</button>
+        </div>
+        <button onClick={emailReport} style={{ width: "100%", fontSize: 12, padding: "9px 10px", borderRadius: 7, border: `1px solid ${LINE}`, background: SURFACE, color: INK, cursor: "pointer", fontFamily: FONT_BODY }}>Send by Email</button>
+
+        <div style={{ fontSize: 10.5, color: INK_SOFT, marginTop: 10, lineHeight: 1.45 }}>
+          “Print / Save PDF” opens the browser print window, where you can choose your printer or <b>Save as PDF</b>.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Printable planner / achievement report ----------
+function PlannerPrintModal({ data, currentDate, onClose }) {
+  const [period, setPeriod] = useState("month");
+  const [anchorDate, setAnchorDate] = useState(dateKey(currentDate));
+
+  const anchor = new Date(anchorDate + "T00:00:00");
+  const start = period === "week" ? startOfWeek(anchor) : new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  const end = period === "week" ? addDays(start, 6) : new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
+
+  const rows = [];
+  let cursor = new Date(start);
+  while (cursor <= end) {
+    const key = dateKey(cursor);
+    (data.bookings[key] || []).forEach((b) => rows.push({ date: new Date(cursor), booking: b }));
+    cursor = addDays(cursor, 1);
+  }
+
+  const scheduled = rows.reduce((s, r) => s + (Number(r.booking.price) || 0), 0);
+  const completed = rows.filter((r) => r.booking.completed).reduce((s, r) => s + (Number(r.booking.price) || 0), 0);
+  const deposits = rows.reduce((s, r) => s + (Number(r.booking.deposit) || 0), 0);
+  const target = Number(data.settings.target) || 0;
+  const achievement = target > 0 ? Math.min(100, (scheduled / target) * 100) : 0;
+
+  const printPlanner = () => {
+    const win = window.open("", "_blank", "width=1000,height=900");
+    if (!win) return;
+    const listHtml = rows.map((r) => {
+      const d = `${pad(r.date.getDate())}/${pad(r.date.getMonth() + 1)}/${r.date.getFullYear()}`;
+      return `<tr><td>${d}</td><td>${r.booking.customerName || "Untitled"}</td><td>${r.booking.category || ""}</td><td>${fmtMoney(r.booking.price, data.settings.currency)}</td><td>${r.booking.paymentType || "CASH"}</td><td>${r.booking.completed ? "Confirmed" : "Scheduled"}</td></tr>`;
+    }).join("");
+
+    win.document.write(`
+      <!DOCTYPE html><html><head><title>Planner Achievement</title>
+      <style>
+        body{font-family:Arial,sans-serif;color:#1B1F2A;margin:28px}
+        h1{margin:0 0 4px;font-size:26px}.sub{color:#5B6472;margin-bottom:22px}
+        .stats{display:flex;gap:10px;margin-bottom:20px}.stat{border:1px solid #ddd;border-radius:8px;padding:12px;flex:1}
+        .stat b{display:block;font-size:20px;margin-top:4px}
+        .bar{height:12px;background:#eee;border-radius:8px;overflow:hidden;margin:8px 0 22px}.fill{height:100%;width:${achievement}%;background:#2D6A4F}
+        table{width:100%;border-collapse:collapse;font-size:11px}th,td{border-bottom:1px solid #ddd;padding:7px;text-align:left}th{background:#f5f3ee}
+        @media print{body{margin:15mm}}
+      </style></head><body>
+      <h1>Planner Achievement</h1>
+      <div class="sub">${period === "week" ? "Week" : "Month"} · ${period === "week" ? `${pad(start.getDate())}/${pad(start.getMonth()+1)}/${start.getFullYear()} – ${pad(end.getDate())}/${pad(end.getMonth()+1)}/${end.getFullYear()}` : `${MONTH_NAMES[start.getMonth()]} ${start.getFullYear()}`}</div>
+      <div class="stats">
+        <div class="stat">Scheduled<b>${fmtMoney(scheduled, data.settings.currency)}</b></div>
+        <div class="stat">Confirmed<b>${fmtMoney(completed, data.settings.currency)}</b></div>
+        <div class="stat">Deposits<b>${fmtMoney(deposits, data.settings.currency)}</b></div>
+        <div class="stat">Customers<b>${rows.length}</b></div>
+      </div>
+      <div>Achievement: <b>${achievement.toFixed(0)}%</b> of ${fmtMoney(target, data.settings.currency)} target</div>
+      <div class="bar"><div class="fill"></div></div>
+      <table><thead><tr><th>Date</th><th>Customer</th><th>Category</th><th>Price</th><th>Payment</th><th>Status</th></tr></thead><tbody>${listHtml || '<tr><td colspan="6">No bookings in this period.</td></tr>'}</tbody></table>
+      <script>window.onload=function(){window.print();}<\/script></body></html>
+    `);
+    win.document.close();
+  };
+
+  return (
+    <div style={modalWrap} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{ ...modalCard, maxWidth: 500 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <span style={{ fontFamily: FONT_DISPLAY, fontSize: 20, fontWeight: 600, color: INK }}>Print planner & achievement</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: INK_SOFT }}><X size={18} /></button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+          <button onClick={() => setPeriod("week")} style={{ ...toggleBtn, borderRadius: 7, background: period === "week" ? INK : SURFACE, color: period === "week" ? "#fff" : INK_SOFT, border: `1px solid ${LINE}` }}>Weekly</button>
+          <button onClick={() => setPeriod("month")} style={{ ...toggleBtn, borderRadius: 7, background: period === "month" ? INK : SURFACE, color: period === "month" ? "#fff" : INK_SOFT, border: `1px solid ${LINE}` }}>Monthly</button>
+        </div>
+        <label style={labelStyle}>Choose period</label>
+        <input type="date" value={anchorDate} onChange={(e) => setAnchorDate(e.target.value)} style={{ ...inputStyle, marginBottom: 14 }} />
+        <div style={{ background: SURFACE, border: `1px solid ${LINE}`, borderRadius: 10, padding: 14, marginBottom: 14 }}>
+          <Row label="Scheduled" value={fmtMoney(scheduled, data.settings.currency)} />
+          <Row label="Confirmed" value={fmtMoney(completed, data.settings.currency)} />
+          <Row label="Deposits" value={fmtMoney(deposits, data.settings.currency)} />
+          <Row label="Customers" value={String(rows.length)} />
+          <Row label="Achievement" value={`${achievement.toFixed(0)}%`} bold color={achievement >= 100 ? GREEN : GOLD} />
+        </div>
+        <button onClick={printPlanner} style={{ width: "100%", fontSize: 12.5, padding: "10px 14px", borderRadius: 7, border: "none", background: GREEN, color: "#fff", cursor: "pointer", fontFamily: FONT_BODY, fontWeight: 600 }}>
+          Print / Save as PDF
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Settings modal ----------
+function SettingsModal({ settings, onSetTarget, onSetCurrency, onAddCategory, onUpdateCategory, onRemoveCategory, onClose }) {
+  return (
+    <div style={modalWrap} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={modalCard}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <span style={{ fontFamily: FONT_DISPLAY, fontSize: 20, fontWeight: 600, color: INK }}>Settings</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: INK_SOFT }}><X size={18} /></button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10, marginBottom: 20 }}>
+          <div>
+            <label style={labelStyle}>Monthly target</label>
+            <input type="number" value={settings.target} onChange={(e) => onSetTarget(Number(e.target.value) || 0)} style={{ ...inputStyle, fontFamily: FONT_MONO, fontSize: 14 }} />
+          </div>
+          <div>
+            <label style={labelStyle}>Currency</label>
+            <input type="text" value={settings.currency} maxLength={3} onChange={(e) => onSetCurrency(e.target.value)} style={{ ...inputStyle, fontFamily: FONT_MONO, fontSize: 14 }} />
+          </div>
+        </div>
+        <div style={{ marginBottom: 10, ...labelStyle }}>Session categories</div>
+        {settings.categories.map((c, i) => (
+          <div key={c.id} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: PALETTE[i % PALETTE.length], flexShrink: 0 }} />
+            <input type="text" value={c.name} onChange={(e) => onUpdateCategory(c.id, { name: e.target.value })} style={{ ...inputStyle, flex: 2 }} />
+            <input type="number" value={c.price} onChange={(e) => onUpdateCategory(c.id, { price: Number(e.target.value) || 0 })} style={{ ...inputStyle, flex: 1, fontFamily: FONT_MONO }} />
+            <button onClick={() => onRemoveCategory(c.id)} style={{ background: "none", border: "none", cursor: "pointer", color: RUST, flexShrink: 0 }}><Trash2 size={15} /></button>
+          </div>
+        ))}
+        <button onClick={onAddCategory} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, padding: "8px 12px", borderRadius: 6, border: `1px dashed ${LINE}`, background: "none", color: INK_SOFT, cursor: "pointer", width: "100%", justifyContent: "center", fontFamily: FONT_BODY, marginTop: 4 }}>
+          <Plus size={13} /> Add category
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Calculator modal ----------
+function CalculatorModal({ settings, stats, onClose }) {
+  const [qty, setQty] = useState({});
+  const categories = settings.categories;
+  const extraTotal = categories.reduce((s, c) => s + (Number(qty[c.id]) || 0) * c.price, 0);
+  const projected = stats.scheduled + extraTotal;
+  const remaining = Math.max(settings.target - stats.scheduled, 0);
+  const projectedRemaining = Math.max(settings.target - projected, 0);
+  const setQ = (id, v) => setQty((p) => ({ ...p, [id]: Math.max(0, Number(v) || 0) }));
+
+  return (
+    <div style={modalWrap} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={modalCard}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <span style={{ fontFamily: FONT_DISPLAY, fontSize: 20, fontWeight: 600, color: INK, display: "flex", alignItems: "center", gap: 8 }}>
+            <Calculator size={18} color={GOLD} /> Goal calculator
+          </span>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: INK_SOFT }}><X size={18} /></button>
+        </div>
+
+        <div style={{ background: SURFACE, border: `1px solid ${LINE}`, borderRadius: 10, padding: 12, marginBottom: 18 }}>
+          <Row label="Target" value={fmtMoney(settings.target, settings.currency)} />
+          <Row label="Scheduled so far" value={fmtMoney(stats.scheduled, settings.currency)} />
+          <Row label="Remaining to goal" value={fmtMoney(remaining, settings.currency)} bold color={remaining > 0 ? RUST : GREEN} />
+        </div>
+
+        <div style={{ ...labelStyle, marginBottom: 10 }}>What if you add extra customers?</div>
+        {categories.map((c) => (
+          <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+            <div style={{ flex: 1, fontSize: 13, fontFamily: FONT_BODY, color: INK }}>
+              {c.name} <span style={{ color: INK_SOFT, fontFamily: FONT_MONO, fontSize: 11.5 }}>({fmtMoney(c.price, settings.currency)})</span>
+            </div>
+            <button onClick={() => setQ(c.id, (qty[c.id] || 0) - 1)} style={stepBtn}>−</button>
+            <div style={{ width: 26, textAlign: "center", fontFamily: FONT_MONO, fontSize: 13 }}>{qty[c.id] || 0}</div>
+            <button onClick={() => setQ(c.id, (qty[c.id] || 0) + 1)} style={stepBtn}>+</button>
+          </div>
+        ))}
+
+        <div style={{ background: "#FBFAF7", border: `1px solid ${LINE}`, borderRadius: 10, padding: 12, marginTop: 12, marginBottom: 18 }}>
+          <Row label="Extra revenue" value={"+" + fmtMoney(extraTotal, settings.currency)} />
+          <Row label="Projected total" value={fmtMoney(projected, settings.currency)} bold />
+          <Row label="Projected remaining" value={projectedRemaining <= 0 ? "Goal reached" : fmtMoney(projectedRemaining, settings.currency)} color={projectedRemaining <= 0 ? GREEN : INK_SOFT} />
+        </div>
+
+        <div style={{ ...labelStyle, marginBottom: 8 }}>To close the gap with one category alone</div>
+        {categories.map((c) => {
+          const needed = remaining > 0 ? Math.ceil(remaining / c.price) : 0;
+          return (
+            <div key={c.id} style={{ fontSize: 12.5, color: INK, marginBottom: 4, fontFamily: FONT_BODY }}>
+              {needed > 0 ? `${needed} more ${c.name} session${needed > 1 ? "s" : ""}` : "Goal already covered"}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ---------- App ----------
+function App({ user, onLogout }) {
+  const [data, setData] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+  const [view, setView] = useState("month");
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [dayPanel, setDayPanel] = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showCalculator, setShowCalculator] = useState(false);
+  const [invoiceDay, setInvoiceDay] = useState(null);
+  const [showPlannerPrint, setShowPlannerPrint] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await window.storage.get("planner-data", false);
+        if (mounted) setData(res && res.value ? JSON.parse(res.value) : defaultData());
+      } catch (e) {
+        if (mounted) setData(defaultData());
+      } finally {
+        if (mounted) setLoaded(true);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!loaded || !data) return;
+    const t = setTimeout(() => {
+      window.storage.set("planner-data", JSON.stringify(data), false).catch(() => {});
+    }, 300);
+    return () => clearTimeout(t);
+  }, [data, loaded]);
+
+  useEffect(() => {
+    const handler = (e) => setInvoiceDay(e.detail);
+    window.addEventListener("planner-open-invoice", handler);
+    return () => window.removeEventListener("planner-open-invoice", handler);
+  }, []);
+
+  if (!data) {
+    return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: BG, fontFamily: FONT_BODY, color: INK_SOFT }}>Loading planner…</div>;
+  }
+
+  const addBooking = (key, booking) => setData((prev) => ({ ...prev, bookings: { ...prev.bookings, [key]: [...(prev.bookings[key] || []), { ...booking, id: genId() }] } }));
+  const updateBooking = (key, id, patch) => setData((prev) => ({ ...prev, bookings: { ...prev.bookings, [key]: (prev.bookings[key] || []).map((b) => (b.id === id ? { ...b, ...patch } : b)) } }));
+  const deleteBooking = (key, id) => setData((prev) => {
+    const list = (prev.bookings[key] || []).filter((b) => b.id !== id);
+    const bookings = { ...prev.bookings };
+    if (list.length) bookings[key] = list; else delete bookings[key];
+    return { ...prev, bookings };
+  });
+
+  const setTarget = (v) => setData((prev) => ({ ...prev, settings: { ...prev.settings, target: v } }));
+  const setCurrency = (v) => setData((prev) => ({ ...prev, settings: { ...prev.settings, currency: v } }));
+  const addCategory = () => setData((prev) => ({ ...prev, settings: { ...prev.settings, categories: [...prev.settings.categories, { id: genId(), name: "New category", price: 0 }] } }));
+  const updateCategory = (id, patch) => setData((prev) => ({ ...prev, settings: { ...prev.settings, categories: prev.settings.categories.map((c) => (c.id === id ? { ...c, ...patch } : c)) } }));
+  const removeCategory = (id) => setData((prev) => ({ ...prev, settings: { ...prev.settings, categories: prev.settings.categories.filter((c) => c.id !== id) } }));
+
+  const stats = monthStats(data, currentDate);
+  const target = data.settings.target;
+  const pct = target > 0 ? Math.min(100, (stats.scheduled / target) * 100) : 0;
+  const remaining = Math.max(target - stats.scheduled, 0);
+  const overBy = stats.scheduled > target ? stats.scheduled - target : 0;
+
+  const goPrev = () => setCurrentDate((d) => (view === "month" ? addMonthsFn(d, -1) : addDays(d, -7)));
+  const goNext = () => setCurrentDate((d) => (view === "month" ? addMonthsFn(d, 1) : addDays(d, 7)));
+  const goToday = () => setCurrentDate(new Date());
+
+  const headerLabel = view === "month"
+    ? `${MONTH_NAMES[currentDate.getMonth()]} ${currentDate.getFullYear()}`
+    : (() => {
+        const w = getWeekDates(currentDate);
+        const sameMonth = w[0].getMonth() === w[6].getMonth();
+        return sameMonth
+          ? `${w[0].getDate()}–${w[6].getDate()} ${MONTH_NAMES[w[0].getMonth()]} ${w[0].getFullYear()}`
+          : `${w[0].getDate()} ${MONTH_NAMES[w[0].getMonth()].slice(0, 3)} – ${w[6].getDate()} ${MONTH_NAMES[w[6].getMonth()].slice(0, 3)} ${w[6].getFullYear()}`;
+      })();
+
+  return (
+    <div style={{ minHeight: "100vh", background: BG, fontFamily: FONT_BODY, paddingBottom: 40 }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+        * { box-sizing: border-box; }
+        input, select, textarea, button { outline: none; font-family: inherit; }
+        input:focus, select:focus, textarea:focus { border-color: ${GOLD} !important; }
+        button:focus-visible { outline: 2px solid ${GOLD}; outline-offset: 2px; }
+      `}</style>
+
+      <div style={{ maxWidth: 780, margin: "0 auto", padding: "24px 16px 0" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18, flexWrap: "wrap", gap: 10 }}>
+          <div>
+            <div style={{ fontFamily: FONT_MONO, fontSize: 10.5, color: GOLD, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 4 }}>
+              Booking planner · {user?.username || ""}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <button onClick={goPrev} style={navBtn}><ChevronLeft size={16} /></button>
+              <span style={{ fontFamily: FONT_DISPLAY, fontSize: 22, fontWeight: 600, color: INK }}>{headerLabel}</span>
+              <button onClick={goNext} style={navBtn}><ChevronRight size={16} /></button>
+              <button onClick={goToday} style={{ ...navBtn, width: "auto", padding: "0 10px", fontSize: 11, fontFamily: FONT_BODY }}>Today</button>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <div style={{ display: "flex", border: `1px solid ${LINE}`, borderRadius: 8, overflow: "hidden" }}>
+              <button onClick={() => setView("month")} style={{ ...toggleBtn, background: view === "month" ? INK : SURFACE, color: view === "month" ? "#fff" : INK_SOFT }}>Month</button>
+              <button onClick={() => setView("week")} style={{ ...toggleBtn, background: view === "week" ? INK : SURFACE, color: view === "week" ? "#fff" : INK_SOFT }}>Week</button>
+            </div>
+            <button onClick={() => setInvoiceDay(dateKey(currentDate))} style={iconBtn} title="Weekly / monthly invoice"><FileText size={17} /></button>
+            <button onClick={() => setShowPlannerPrint(true)} style={iconBtn} title="Print planner & achievement"><Check size={17} /></button>
+            <button onClick={() => setShowCalculator(true)} style={iconBtn} title="Calculator"><Calculator size={17} /></button>
+            <button onClick={() => setShowSettings(true)} style={iconBtn} title="Settings"><Settings size={17} /></button>
+            <button onClick={onLogout} style={{ ...iconBtn, width: "auto", padding: "0 10px", fontSize: 11, fontFamily: FONT_BODY }} title="Log out">
+              Log out
+            </button>
+          </div>
+        </div>
+
+        <div style={{ background: SURFACE, border: `1px solid ${LINE}`, borderRadius: 12, padding: "14px 16px", marginBottom: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+            <span style={{ fontFamily: FONT_BODY, fontSize: 12, color: INK_SOFT }}>
+              Scheduled <b style={{ color: INK }}>{fmtMoney(stats.scheduled, data.settings.currency)}</b> of {fmtMoney(target, data.settings.currency)} goal
+              {stats.completed > 0 && <span> · <b style={{ color: GREEN }}>{fmtMoney(stats.completed, data.settings.currency)}</b> confirmed</span>}
+            </span>
+            <span style={{ fontFamily: FONT_MONO, fontSize: 12.5, fontWeight: 600, color: overBy > 0 ? GOLD : (remaining === 0 ? GREEN : RUST) }}>
+              {overBy > 0 ? `+${fmtMoney(overBy, data.settings.currency)} over goal` : remaining === 0 ? "Goal reached" : `${fmtMoney(remaining, data.settings.currency)} to go`}
+            </span>
+          </div>
+          <div style={{ height: 10, borderRadius: 5, background: "#F0EEE7", overflow: "hidden", backgroundImage: "repeating-linear-gradient(90deg, transparent, transparent calc(10% - 1px), rgba(27,31,42,0.06) calc(10% - 1px), rgba(27,31,42,0.06) 10%)" }}>
+            <div style={{ height: "100%", width: `${pct}%`, background: pct >= 100 ? GOLD : GREEN, borderRadius: 5, transition: "width 0.3s ease" }} />
+          </div>
+        </div>
+
+        {view === "month" ? (
+          <MonthGrid currentDate={currentDate} bookings={data.bookings} categories={data.settings.categories} currency={data.settings.currency}
+            onDayClick={(key) => setDayPanel({ key, focusId: null })}
+            onChipClick={(key, id) => setDayPanel({ key, focusId: id })} />
+        ) : (
+          <WeekView currentDate={currentDate} bookings={data.bookings} categories={data.settings.categories} currency={data.settings.currency}
+            onAdd={addBooking} onUpdate={updateBooking} onDelete={deleteBooking} />
+        )}
+
+        <div style={{ textAlign: "center", fontSize: 11, color: "#B7B2A6", marginTop: 24, fontFamily: FONT_BODY }}>Saved automatically</div>
+      </div>
+
+      {dayPanel && (
+        <DayPanel dateKeyValue={dayPanel.key} bookings={data.bookings} categories={data.settings.categories} currency={data.settings.currency}
+          focusId={dayPanel.focusId} onAdd={addBooking} onUpdate={updateBooking} onDelete={deleteBooking} onClose={() => setDayPanel(null)} />
+      )}
+      {showSettings && (
+        <SettingsModal settings={data.settings} onSetTarget={setTarget} onSetCurrency={setCurrency}
+          onAddCategory={addCategory} onUpdateCategory={updateCategory} onRemoveCategory={removeCategory}
+          onClose={() => setShowSettings(false)} />
+      )}
+      {showCalculator && (
+        <CalculatorModal settings={data.settings} stats={stats} onClose={() => setShowCalculator(false)} />
+      )}
+      {invoiceDay && (
+        <InvoiceModal bookings={data.bookings} currency={data.settings.currency} initialDate={invoiceDay} onClose={() => setInvoiceDay(null)} />
+      )}
+      {showPlannerPrint && (
+        <PlannerPrintModal data={data} currentDate={currentDate} onClose={() => setShowPlannerPrint(false)} />
+      )}
+    </div>
+  );
+}
+
+
+function AuthGate() {
+  const [user, setUser] = useState(null);
+  const [mode, setMode] = useState("login");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetch("/api/auth/me", { credentials: "same-origin" })
+      .then(async (r) => {
+        if (!r.ok) return null;
+        const p = await r.json();
+        return p.user || null;
+      })
+      .then((u) => setUser(u))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/register";
+      const res = await fetch(endpoint, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: username.trim(), password })
+      });
+      const p = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(p.error || "Something went wrong");
+      setUser(p.user);
+      setPassword("");
+    } catch (err) {
+      setError(err.message || "Something went wrong");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const logout = async () => {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).catch(() => {});
+    setUser(null);
+  };
+
+  if (loading) {
+    return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: BG, fontFamily: FONT_BODY, color: INK_SOFT }}>Loading…</div>;
+  }
+
+  if (user) return <App user={user} onLogout={logout} />;
+
+  return (
+    <div style={{ minHeight: "100vh", background: BG, display: "flex", alignItems: "center", justifyContent: "center", padding: 18, fontFamily: FONT_BODY }}>
+      <div style={{ width: "100%", maxWidth: 390, background: SURFACE, border: `1px solid ${LINE}`, borderRadius: 16, padding: 24, boxShadow: "0 10px 35px rgba(27,31,42,0.08)" }}>
+        <div style={{ fontFamily: FONT_MONO, fontSize: 10.5, color: GOLD, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 5 }}>Booking planner</div>
+        <h1 style={{ margin: "0 0 7px", fontFamily: FONT_DISPLAY, fontSize: 28, color: INK }}>{mode === "login" ? "Log in" : "Create account"}</h1>
+        <p style={{ margin: "0 0 20px", color: INK_SOFT, fontSize: 13, lineHeight: 1.5 }}>
+          {mode === "login" ? "Access your private planner from any device." : "Create your private planner account. Your bookings will be stored in Cloudflare D1."}
+        </p>
+
+        <form onSubmit={submit}>
+          <label style={labelStyle}>Username</label>
+          <input
+            autoComplete="username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Your username"
+            style={{ ...inputStyle, marginBottom: 12 }}
+            required
+          />
+          <label style={labelStyle}>Password</label>
+          <input
+            type="password"
+            autoComplete={mode === "login" ? "current-password" : "new-password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={mode === "login" ? "Your password" : "At least 8 characters"}
+            style={{ ...inputStyle, marginBottom: 12 }}
+            required
+            minLength={8}
+          />
+          {error && <div style={{ background: "#FFF1EF", color: RUST, border: "1px solid #F0D0CB", borderRadius: 7, padding: "9px 10px", fontSize: 12, marginBottom: 12 }}>{error}</div>}
+          <button type="submit" disabled={busy} style={{ width: "100%", padding: "10px 14px", borderRadius: 7, border: "none", background: GREEN, color: "#fff", cursor: busy ? "wait" : "pointer", fontWeight: 600, fontFamily: FONT_BODY }}>
+            {busy ? "Please wait…" : mode === "login" ? "Log in" : "Create account"}
+          </button>
+        </form>
+
+        <button
+          onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }}
+          style={{ width: "100%", marginTop: 12, padding: "8px", border: "none", background: "transparent", color: INK_SOFT, cursor: "pointer", fontSize: 12, fontFamily: FONT_BODY }}
+        >
+          {mode === "login" ? "Need an account? Create one" : "Already have an account? Log in"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<AuthGate />);
+</script>
+</body>
+</html>
